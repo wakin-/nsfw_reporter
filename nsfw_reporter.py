@@ -17,7 +17,8 @@ from bottle import get, run, template, request, HTTPResponse
 from PIL import Image
 from StringIO import StringIO
 import caffe
-
+import ConfigParser
+from mastodon import Mastodon, StreamListener
 
 def resize_image(data, sz=(256, 256)):
     """
@@ -99,16 +100,47 @@ caffe_transformer.set_mean('data', np.array([104, 117, 123]))  # subtract the da
 caffe_transformer.set_raw_scale('data', 255)  # rescale from [0, 1] to [0, 255]
 caffe_transformer.set_channel_swap('data', (2, 1, 0))  # swap channels from RGB to BGR
 
-@get('/nsfw_score')
-def nsfw_score():
-    image_url = request.query.image_url
-    response = urllib2.urlopen(image_url)
-    image_data = response.read()
-    scores = caffe_preprocess_and_compute(image_data, caffe_transformer=caffe_transformer, caffe_net=nsfw_net, output_layers=['prob'])
-    score = { 'score' :scores[1] }
-    body = json.dumps(score)
-    response = HTTPResponse(status=200, body=body)
-    response.set_header('Content-Type', 'application/json')
-    return response
+def setup_mastodon_config():
+    inifile = ConfigParser.SafeConfigParser()
+    if (not inifile.read('./config.ini')):
+        print("config.ini not found")
+        print("Please: docker cp config.ini <NAMES>:/workspace/")
+        exit()
+    config = {}
+    config["client_id"] = inifile.get('settings', 'CLIENT_ID')
+    config["api_base_domain"] = inifile.get('settings', 'API_BASE_DOMAIN')
+    config["api_base_url"] = "https://" + config["api_base_domain"]
+    config["client_secret"] = inifile.get('settings', 'CLIENT_SECRET')
+    config["access_token"] = inifile.get('settings', 'ACCESS_TOKEN')
+    config["threshold"] = float(inifile.get('settings', 'THRESHOLD'))
+    if config["threshold"] > 1.0 or config["threshold"] < 0.0:
+        print("threshold is out of range (0.0<=threshold<=1.0)")
+        exit()
+    return config
 
-run(host='0.0.0.0', port=80)
+class Listener(StreamListener):
+    def __init__(self, mstdn):
+        self.mstdn = mstdn
+        self.account = mstdn.account_verify_credentials()
+
+    def on_notification(self, data):
+        return
+
+    def on_update(self, data):
+        if len(data['media_attachments']) > 0 and data['sensitive'] == False:
+            status_id = int(data['id'])
+            for media in data['media_attachments']:
+                image_url = media['preview_url']
+                response = urllib2.urlopen(image_url)
+                image_data = response.read()
+                scores = caffe_preprocess_and_compute(image_data, caffe_transformer=caffe_transformer, caffe_net=nsfw_net, output_layers=['prob'])
+                #print image_url+" : "+str(scores[1])
+                if scores[1] > config['threshold']:
+                    self.mstdn.report(self.account['id'], data['id'], "open_nsfw score is "+str(scores[1]))
+
+    def on_delete(self, data):
+        return
+
+config = setup_mastodon_config()
+mstdn = Mastodon(config["client_id"], config["client_secret"], config["access_token"], config["api_base_url"])
+mstdn.stream_public(Listener(mstdn))

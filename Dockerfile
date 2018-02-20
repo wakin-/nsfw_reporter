@@ -1,5 +1,5 @@
 FROM ubuntu:14.04
-MAINTAINER root@kksg.net
+LABEL maintainer="biwakodon@gmail.com"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
@@ -37,13 +37,13 @@ RUN git clone -b ${CLONE_TAG} --depth 1 https://github.com/BVLC/caffe.git . && \
 
 RUN pip install bottle
 
+RUN pip install Mastodon.py
+
 ENV PYCAFFE_ROOT $CAFFE_ROOT/python
 ENV PYTHONPATH $PYCAFFE_ROOT:$PYTHONPATH
 ENV PATH $CAFFE_ROOT/build/tools:$PYCAFFE_ROOT:$PATH
 RUN echo "$CAFFE_ROOT/build/lib" >> /etc/ld.so.conf.d/caffe.conf && ldconfig
 
-EXPOSE 80
-
 WORKDIR /workspace
 COPY ./ /workspace
-CMD ["/usr/bin/python", "./app.py"]
+CMD ["/usr/bin/python", "./nsfw_reporter.py"]
