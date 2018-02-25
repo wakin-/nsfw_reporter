@@ -128,7 +128,6 @@ class Listener(StreamListener):
 
     def on_update(self, data):
         if len(data['media_attachments']) > 0 and data['sensitive'] == False:
-            status_id = int(data['id'])
             for media in data['media_attachments']:
                 image_url = media['preview_url']
                 response = urllib2.urlopen(image_url)
@@ -136,7 +135,7 @@ class Listener(StreamListener):
                 scores = caffe_preprocess_and_compute(image_data, caffe_transformer=caffe_transformer, caffe_net=nsfw_net, output_layers=['prob'])
                 #print image_url+" : "+str(scores[1])
                 if scores[1] > config['threshold']:
-                    self.mstdn.report(self.account['id'], data['id'], "open_nsfw score is "+str(scores[1]))
+                    self.mstdn.report(data['account']['id'], data['id'], "open_nsfw score is "+str(scores[1]))
 
     def on_delete(self, data):
         return
