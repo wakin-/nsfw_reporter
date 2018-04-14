@@ -139,6 +139,8 @@ class Listener(StreamListener):
                         self.mstdn.report(data['account']['id'], data['id'], "open_nsfw score is "+str(scores[1]))
                 except URLError as e:
                     print "url error: "+image_url
+                except HTTPError as e:
+                    print "http error: "+image_url
 
     def on_delete(self, data):
         return
