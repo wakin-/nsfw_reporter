@@ -130,12 +130,15 @@ class Listener(StreamListener):
         if len(data['media_attachments']) > 0 and data['sensitive'] == False:
             for media in data['media_attachments']:
                 image_url = media['preview_url']
-                response = urllib2.urlopen(image_url)
-                image_data = response.read()
-                scores = caffe_preprocess_and_compute(image_data, caffe_transformer=caffe_transformer, caffe_net=nsfw_net, output_layers=['prob'])
-                #print image_url+" : "+str(scores[1])
-                if scores[1] > config['threshold']:
-                    self.mstdn.report(data['account']['id'], data['id'], "open_nsfw score is "+str(scores[1]))
+                try:
+                    response = urllib2.urlopen(image_url)
+                    image_data = response.read()
+                    scores = caffe_preprocess_and_compute(image_data, caffe_transformer=caffe_transformer, caffe_net=nsfw_net, output_layers=['prob'])
+                    #print image_url+" : "+str(scores[1])
+                    if scores[1] > config['threshold']:
+                        self.mstdn.report(data['account']['id'], data['id'], "open_nsfw score is "+str(scores[1]))
+                except URLError as e:
+                    print "url error: "+image_url
 
     def on_delete(self, data):
         return
