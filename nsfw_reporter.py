@@ -19,6 +19,7 @@ from StringIO import StringIO
 import caffe
 import ConfigParser
 from mastodon import Mastodon, StreamListener
+from requests.exceptions import ChunkedEncodingError
 
 def resize_image(data, sz=(256, 256)):
     """
@@ -121,7 +122,6 @@ def setup_mastodon_config():
 class Listener(StreamListener):
     def __init__(self, mstdn):
         self.mstdn = mstdn
-        self.account = mstdn.account_verify_credentials()
 
     def on_notification(self, data):
         return
@@ -134,7 +134,6 @@ class Listener(StreamListener):
                     response = urllib2.urlopen(image_url)
                     image_data = response.read()
                     scores = caffe_preprocess_and_compute(image_data, caffe_transformer=caffe_transformer, caffe_net=nsfw_net, output_layers=['prob'])
-                    #print image_url+" : "+str(scores[1])
                     if scores[1] > config['threshold']:
                         self.mstdn.report(data['account']['id'], data['id'], "open_nsfw score is "+str(scores[1]))
                 except urllib2.URLError as e:
@@ -145,6 +144,13 @@ class Listener(StreamListener):
     def on_delete(self, data):
         return
 
+def try_streaming(mstdn):
+    try: 
+        mstdn.stream_public(Listener(mstdn))
+    except ChunkedEncodingError as e:
+        print "restart streaming"
+        try_streaming(mstdn)
+
 config = setup_mastodon_config()
 mstdn = Mastodon(config["client_id"], config["client_secret"], config["access_token"], config["api_base_url"])
-mstdn.stream_public(Listener(mstdn))
+try_streaming(mstdn)
