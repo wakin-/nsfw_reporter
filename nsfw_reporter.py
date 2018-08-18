@@ -17,7 +17,6 @@ from bottle import get, run, template, request, HTTPResponse
 from PIL import Image
 from StringIO import StringIO
 import caffe
-import ConfigParser
 from mastodon import Mastodon, StreamListener
 from requests.exceptions import ChunkedEncodingError
 
@@ -101,21 +100,24 @@ caffe_transformer.set_mean('data', np.array([104, 117, 123]))  # subtract the da
 caffe_transformer.set_raw_scale('data', 255)  # rescale from [0, 1] to [0, 255]
 caffe_transformer.set_channel_swap('data', (2, 1, 0))  # swap channels from RGB to BGR
 
+def print_log(str):
+    now = time.ctime()
+    cnvtime = time.strptime(now)
+    print(time.strftime("%Y/%m/%d %H:%M", cnvtime)+" "+str)
+
 def setup_mastodon_config():
-    inifile = ConfigParser.SafeConfigParser()
-    if (not inifile.read('./config.ini')):
-        print("config.ini not found")
-        print("Please: docker cp config.ini <NAMES>:/workspace/")
-        exit()
     config = {}
-    config["client_id"] = inifile.get('settings', 'CLIENT_ID')
-    config["api_base_domain"] = inifile.get('settings', 'API_BASE_DOMAIN')
+    config["client_id"] = os.getenv('CLIENT_ID')
+    config["api_base_domain"] = os.getenv('API_DOMAIN')
     config["api_base_url"] = "https://" + config["api_base_domain"]
-    config["client_secret"] = inifile.get('settings', 'CLIENT_SECRET')
-    config["access_token"] = inifile.get('settings', 'ACCESS_TOKEN')
-    config["threshold"] = float(inifile.get('settings', 'THRESHOLD'))
+    config["client_secret"] = os.getenv('CLIENT_SECRET')
+    config["access_token"] = os.getenv('ACCESS_TOKEN')
+    config["threshold"] = float(os.getenv('THRESHOLD'))
+    if not config["client_id"] or not config["api_base_domain"] or not config["client_secret"] or not config["access_token"] or not config["threshold"]:
+        print_log("require environment value CLIENT_ID, API_DOMAIN, CLIENT_SECRET, ACCESS_TOKEN, and THRESHOLD.")
+        exit()
     if config["threshold"] > 1.0 or config["threshold"] < 0.0:
-        print("threshold is out of range (0.0<=threshold<=1.0)")
+        print_log("threshold is out of range (0.0<=threshold<=1.0)")
         exit()
     return config
 
@@ -137,9 +139,9 @@ class Listener(StreamListener):
                     if scores[1] > config['threshold']:
                         self.mstdn.report(data['account']['id'], data['id'], "open_nsfw score is "+str(scores[1]))
                 except urllib2.URLError as e:
-                    print "url error: "+image_url
+                    print_log("url error: "+image_url)
                 except urllib2.HTTPError as e:
-                    print "http error: "+image_url
+                    print_log("http error: "+image_url)
 
     def on_delete(self, data):
         return
@@ -148,9 +150,10 @@ def try_streaming(mstdn):
     try: 
         mstdn.stream_public(Listener(mstdn))
     except ChunkedEncodingError as e:
-        print "restart streaming"
+        print_log("restart streaming")
         try_streaming(mstdn)
 
 config = setup_mastodon_config()
 mstdn = Mastodon(config["client_id"], config["client_secret"], config["access_token"], config["api_base_url"])
+print_log("start streaming")
 try_streaming(mstdn)
