@@ -1,4 +1,4 @@
-FROM ubuntu:14.04
+FROM ubuntu:16.04
 LABEL maintainer="biwakodon@gmail.com"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python-dev \
         python-numpy \
         python-pip \
+        python-setuptools \
         python-scipy && \
     rm -rf /var/lib/apt/lists/*
 
@@ -29,7 +30,10 @@ WORKDIR $CAFFE_ROOT
 # FIXME: clone a specific git tag and use ARG instead of ENV once DockerHub supports this.
 ENV CLONE_TAG=master
 
+RUN pip install --upgrade pip
+
 RUN git clone -b ${CLONE_TAG} --depth 1 https://github.com/BVLC/caffe.git . && \
+    sed -i -e 's/python-dateutil>=1.4,<2/python-dateutil>=2.0/g' python/requirements.txt && \
     for req in $(cat python/requirements.txt) pydot; do pip install $req; done && \
     mkdir build && cd build && \
     cmake -DCPU_ONLY=1 .. && \
@@ -46,4 +50,4 @@ RUN echo "$CAFFE_ROOT/build/lib" >> /etc/ld.so.conf.d/caffe.conf && ldconfig
 
 WORKDIR /workspace
 COPY ./ /workspace
-CMD ["/usr/bin/python", "./nsfw_reporter.py"]
+CMD ["/usr/bin/python", "-u", "./nsfw_reporter.py"]
