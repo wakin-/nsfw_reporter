@@ -17,8 +17,7 @@ from bottle import get, run, template, request, HTTPResponse
 from PIL import Image
 from StringIO import StringIO
 import caffe
-from mastodon import Mastodon, StreamListener
-from requests.exceptions import ChunkedEncodingError
+from mastodon import Mastodon, StreamListener, MastodonNetworkError
 
 def resize_image(data, sz=(256, 256)):
     """
@@ -136,20 +135,31 @@ class Listener(StreamListener):
                     response = urllib2.urlopen(image_url)
                     image_data = response.read()
                     scores = caffe_preprocess_and_compute(image_data, caffe_transformer=caffe_transformer, caffe_net=nsfw_net, output_layers=['prob'])
+                    print_log(image_url+" "+str(scores[1]))
                     if scores[1] > config['threshold']:
                         self.mstdn.report(data['account']['id'], data['id'], "open_nsfw score is "+str(scores[1]))
                 except urllib2.URLError as e:
                     print_log("url error: "+image_url)
                 except urllib2.HTTPError as e:
                     print_log("http error: "+image_url)
+                except:
+                    print_log("something error: "+image_url)
 
     def on_delete(self, data):
         return
 
 def try_streaming(mstdn):
+    retry_count = 0
+    sleep_time = 1
     try: 
         mstdn.stream_public(Listener(mstdn))
-    except ChunkedEncodingError as e:
+        retry_count = 0
+        sleep_time = 1
+    except:
+        retry_count += 1
+        if sleep_time < 3600:
+            sleep_time += retry_count
+        time.sleep(sleep_time)
         print_log("restart streaming")
         try_streaming(mstdn)
 
