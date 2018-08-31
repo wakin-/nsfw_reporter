@@ -130,6 +130,8 @@ class Listener(StreamListener):
     def on_update(self, data):
         if len(data['media_attachments']) > 0 and data['sensitive'] == False:
             for media in data['media_attachments']:
+                if media['type'] == 'unknown':
+                    continue
                 image_url = media['preview_url']
                 try:
                     response = urllib2.urlopen(image_url)
