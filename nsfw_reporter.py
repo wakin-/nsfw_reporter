@@ -134,7 +134,9 @@ class Listener(StreamListener):
                     continue
                 image_url = media['preview_url']
                 try:
-                    response = urllib2.urlopen(image_url)
+                    request = urllib2.Request(image_url)
+                    request.add_header("User-Agent", "Mozilla/5.0")
+                    response = urllib2.urlopen(request)
                     image_data = response.read()
                     scores = caffe_preprocess_and_compute(image_data, caffe_transformer=caffe_transformer, caffe_net=nsfw_net, output_layers=['prob'])
                     print_log(image_url+" "+str(scores[1]))
